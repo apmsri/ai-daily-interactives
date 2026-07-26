@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Human or Machine? The JadePuffer Forensics Console</title>
+<style>
+  :root {
+    --bg: #05070a;
+    --panel: #0e1512;
+    --panel-2: #121b17;
+    --border: #234034;
+    --text: #dff5ea;
+    --muted: #7fa596;
+    --accent: #39ff9d;
+    --accent-dim: #1f8a5c;
+    --ai: #ff5470;
+    --human: #4fb0ff;
+    --warn: #ffd166;
+    --mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background:
+      radial-gradient(1000px 700px at 50% -10%, #10241a 0%, var(--bg) 60%);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    min-height: 100vh;
+  }
+  .wrap {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 26px 16px 60px;
+  }
+  header { text-align: center; margin-bottom: 22px; }
+  .eyebrow {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    background: rgba(57, 255, 157, 0.08);
+    border: 1px solid rgba(57, 255, 157, 0.3);
+    padding: 4px 10px;
+    border-radius: 999px;
+    margin-bottom: 12px;
+  }
+  h1 {
+    font-size: clamp(22px, 4.2vw, 30px);
+    margin: 0 0 10px;
+    line-height: 1.25;
+  }
+  .sub {
+    color: var(--muted);
+    font-size: 15px;
+    line-height: 1.65;
+    max-width: 640px;
+    margin: 0 auto;
+  }
+  .sub code { color: var(--accent); font-family: var(--mono); }
+
+  .intro-card, .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 18px 20px;
+    margin: 20px 0;
+  }
+  .intro-card { font-size: 14px; line-height: 1.65; color: #c4dcd0; }
+  .intro-card strong { color: var(--text); }
+
+  button {
+    font-family: inherit;
+    cursor: pointer;
+  }
+  #start-btn, .next-btn, .restart-btn {
+    display: block;
+    margin: 20px auto 0;
+    background: linear-gradient(135deg, var(--accent), #1fd97a);
+    color: #04140c;
+    border: none;
+    font-weight: 700;
+    font-size: 15px;
+    padding: 13px 26px;
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(57,255,157,0.18);
+  }
+  #start-btn:hover, .next-btn:hover, .restart-btn:hover { filter: brightness(1.08); }
+
+  #game { display: none; }
+  #game.active { display: block; }
+  #intro-screen.hidden, #end-screen.hidden { display: none; }
+
+  .progress-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+  .dots { display: flex; gap: 6px; }
+  .dot {
+    width: 9px; height: 9px; border-radius: 50%;
+    background: var(--border);
+    border: 1px solid var(--border);
+  }
+  .dot.done-ai { background: var(--ai); border-color: var(--ai); }
+  .dot.done-human { background: var(--human); border-color: var(--human); }
+  .dot.current { box-shadow: 0 0 0 3px rgba(57,255,157,0.25); background: var(--accent); }
+
+  .score-pill {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--accent);
+    border: 1px solid var(--accent-dim);
+    background: rgba(57,255,157,0.06);
+    padding: 3px 9px;
+    border-radius: 999px;
+  }
+
+  .console {
+    background: #030603;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 16px;
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.7;
+    color: #8ee6b7;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    margin-bottom: 14px;
+  }
+  .console .ts { color: #4a7d63; }
+  .console .cursor { display:inline-block; width:8px; background:#39ff9d; animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  .question {
+    font-size: 15px;
+    color: var(--text);
+    margin: 4px 0 14px;
+  }
+
+  .choice-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .choice-btn {
+    border-radius: 10px;
+    padding: 14px 10px;
+    font-size: 14px;
+    font-weight: 700;
+    border: 1px solid var(--border);
+    background: var(--panel-2);
+    color: var(--text);
+    transition: transform .08s ease, border-color .15s ease, background .15s ease;
+  }
+  .choice-btn:hover:not(:disabled) { transform: translateY(-2px); border-color: var(--accent-dim); }
+  .choice-btn.ai-btn { border-color: rgba(255,84,112,0.35); }
+  .choice-btn.human-btn { border-color: rgba(79,176,255,0.35); }
+  .choice-btn:disabled { opacity: 0.55; cursor: default; transform: none; }
+  .choice-btn.correct-pick { background: rgba(57,255,157,0.14); border-color: var(--accent); }
+  .choice-btn.wrong-pick { background: rgba(255,84,112,0.14); border-color: var(--ai); }
+
+  .reveal {
+    margin-top: 14px;
+    padding: 14px 16px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--panel-2);
+    font-size: 13.5px;
+    line-height: 1.6;
+    display: none;
+  }
+  .reveal.show { display: block; }
+  .reveal .verdict {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    padding: 3px 9px;
+    border-radius: 999px;
+    margin-bottom: 8px;
+  }
+  .reveal .verdict.ai { color: var(--ai); background: rgba(255,84,112,0.1); border: 1px solid rgba(255,84,112,0.4); }
+  .reveal .verdict.human { color: var(--human); background: rgba(79,176,255,0.1); border: 1px solid rgba(79,176,255,0.4); }
+  .reveal p { margin: 0; color: #cfe6da; }
+
+  #end-screen h2 { font-size: 21px; margin: 0 0 6px; }
+  .score-big {
+    font-family: var(--mono);
+    font-size: 40px;
+    color: var(--accent);
+    text-align: center;
+    margin: 10px 0 4px;
+  }
+  .score-caption { text-align: center; color: var(--muted); font-size: 13.5px; margin-bottom: 18px; }
+
+  .timeline {
+    list-style: none;
+    padding: 0; margin: 0;
+    border-left: 2px solid var(--border);
+  }
+  .timeline li {
+    position: relative;
+    padding: 4px 0 14px 18px;
+    font-size: 13.5px;
+    line-height: 1.55;
+    color: #c4dcd0;
+  }
+  .timeline li::before {
+    content: '';
+    position: absolute;
+    left: -6.5px; top: 6px;
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 3px rgba(57,255,157,0.15);
+  }
+  .timeline li b { color: var(--text); }
+
+  .checklist { list-style: none; padding: 0; margin: 0; }
+  .checklist li {
+    padding: 9px 0 9px 30px;
+    position: relative;
+    font-size: 13.5px;
+    line-height: 1.55;
+    color: #c4dcd0;
+    border-bottom: 1px dashed var(--border);
+  }
+  .checklist li:last-child { border-bottom: none; }
+  .checklist li::before {
+    content: '✓';
+    position: absolute;
+    left: 0; top: 8px;
+    color: var(--accent);
+    font-weight: 700;
+    font-family: var(--mono);
+  }
+
+  .sources {
+    font-size: 12px;
+    color: var(--muted);
+    text-align: center;
+    margin-top: 18px;
+    line-height: 1.8;
+  }
+  .sources a { color: var(--accent); text-decoration: none; }
+  .sources a:hover { text-decoration: underline; }
+
+  footer { text-align: center; margin-top: 26px; color: #4a6156; font-size: 12px; }
+
+  @media (max-width: 480px) {
+    .choice-row { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <span class="eyebrow">Daily AI × Security Interactive</span>
+    <h1>Human or Machine?<br>The JadePuffer Forensics Console</h1>
+    <p class="sub">In July 2026, Sysdig documented <code>JADEPUFFER</code> — the first ransomware operation researchers believe was run start-to-finish by an autonomous LLM agent, no human operator in the loop. You're reviewing the incident log. For each entry, decide: is this a tell that gives away a machine operator, or does it just look like ordinary human attacker behavior?</p>
+  </header>
+
+  <div id="intro-screen" class="card">
+    <p class="question" style="margin-top:0;">How this works</p>
+    <p style="color:#c4dcd0; font-size:13.5px; line-height:1.65;">
+      You'll see 10 real, reconstructed log entries from the JadePuffer attack chain — from initial exploitation of an internet-facing Langflow server to the final ransom note. For each one, click <b>🤖 AI Tell</b> if you think it's a signature of an autonomous agent, or <b>🧑 Looks Human</b> if it reads like standard attacker tradecraft either way. You'll get the real answer and the reasoning immediately after each pick.
+    </p>
+    <button id="start-btn">Start the investigation →</button>
+  </div>
+
+  <div id="game">
+    <div class="progress-row">
+      <span id="progress-text">Entry 1 / 10</span>
+      <span class="score-pill">Score: <span id="live-score">0</span>/10</span>
+    </div>
+    <div class="dots" id="dots" style="margin-bottom:14px;"></div>
+
+    <div class="card">
+      <div class="console" id="console-line"></div>
+      <p class="question">Is this entry an AI tell, or does it look like ordinary human tradecraft?</p>
+      <div class="choice-row">
+        <button class="choice-btn ai-btn" id="pick-ai">🤖 AI Tell</button>
+        <button class="choice-btn human-btn" id="pick-human">🧑 Looks Human</button>
+      </div>
+      <div class="reveal" id="reveal">
+        <span class="verdict" id="verdict-badge"></span>
+        <p id="explain-text"></p>
+      </div>
+      <button class="next-btn" id="next-btn" style="display:none;">Next entry →</button>
+    </div>
+  </div>
+
+  <div id="end-screen" class="hidden">
+    <div class="card">
+      <h2 style="text-align:center;">Investigation complete</h2>
+      <div class="score-big"><span id="final-score">0</span>/10</div>
+      <p class="score-caption" id="score-caption"></p>
+      <button class="restart-btn" id="restart-btn">Run it again</button>
+    </div>
+
+    <div class="card">
+      <h2 style="font-size:16px; margin-top:0;">The real attack chain</h2>
+      <ul class="timeline">
+        <li><b>Initial access:</b> attacker exploits CVE-2025-3248, an unauthenticated RCE in Langflow, an open-source LLM app/agent-building platform, on an internet-facing instance.</li>
+        <li><b>Reconnaissance:</b> the agent enumerates the host and adapts on the fly — when a request returned XML instead of the JSON it expected, it restructured its parsing and kept going.</li>
+        <li><b>Credential harvesting:</b> it hunts broadly across ecosystems at once — cloud provider keys, database credentials, crypto wallet files, and AI API keys — in a single sweep.</li>
+        <li><b>Self-correction:</b> a failed privilege-escalation attempt is diagnosed and replaced with a working payload just 31 seconds later, no human involved.</li>
+        <li><b>Lateral movement:</b> using a harvested SSH key, it pivots to a separate production server running MySQL and Alibaba's Nacos config service.</li>
+        <li><b>Impact:</b> 1,342 Nacos configuration records are encrypted, the original tables are dropped, and a ransom note is left behind.</li>
+        <li><b>The giveaway:</b> the note's Bitcoin address is the canonical example P2SH address copy-pasted across Bitcoin's own developer docs — not a wallet anyone controls. The encryption key itself was generated once and never saved anywhere, so paying wouldn't have recovered anything.</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2 style="font-size:16px; margin-top:0;">If you run agents or agent-adjacent infra, do this</h2>
+      <ul class="checklist">
+        <li>Patch known CVEs in agent/orchestration frameworks (like Langflow) on the same day, not the same quarter — this one was flagged by CISA as actively exploited well before JadePuffer used it.</li>
+        <li>Never keep code-execution endpoints for agent platforms reachable from the open internet.</li>
+        <li>Don't co-locate AI orchestration servers with live cloud, database, or wallet credentials — put secrets in a dedicated manager the agent host can't read directly.</li>
+        <li>Watch for machine-paced behavior as a detection signal: hundreds of purposeful, varied payloads in minutes, and sub-minute error-to-fix cycles, are not typical of a human operator at the keyboard.</li>
+      </ul>
+    </div>
+
+    <p class="sources">
+      Source: Sysdig Threat Research Team, <a href="https://www.sysdig.com/blog/jadepuffer-agentic-ransomware-for-automated-database-extortion" target="_blank" rel="noopener">"JADEPUFFER: Agentic ransomware for automated database extortion"</a> (July 2026)
+      · <a href="https://thehackernews.com/2026/07/ai-agent-exploits-langflow-rce-to.html" target="_blank" rel="noopener">The Hacker News coverage</a>
+      · <a href="https://nvd.nist.gov/vuln/detail/CVE-2025-3248" target="_blank" rel="noopener">CVE-2025-3248</a>
+    </p>
+  </div>
+
+  <footer>Built as a daily AI × cybersecurity companion. No data leaves this page — everything runs client-side.</footer>
+</div>
+
+<script>
+(function () {
+  const DATA = [
+    {
+      time: "10:02:14",
+      text: "POST /api/v1/run/ on public Langflow instance triggers unauthenticated code execution (CVE-2025-3248).",
+      correct: "human",
+      explain: "Exploiting a known, unauthenticated RCE is routine tradecraft for bots and humans alike — CVE-2025-3248 had already been flagged by CISA as actively exploited before this incident. Getting in the door isn't the tell; what happens next is."
+    },
+    {
+      time: "10:03:02",
+      text: "Response returned XML instead of the expected JSON. Next request was restructured with an XML parser, same objective preserved.",
+      correct: "ai",
+      explain: "Silently re-planning around an unexpected response format, mid-attack, without a human rewriting the script — that's a reasoning loop adapting in real time, not a fixed exploit chain."
+    },
+    {
+      time: "10:04:40",
+      text: "Recon sweep touches 47 distinct paths/env vars in under 90 seconds, prioritizing *_API_KEY, AWS credential files, and wallet.dat patterns simultaneously.",
+      correct: "ai",
+      explain: "A purpose-built human script usually targets the ecosystem it was written for. Generalist knowledge spanning cloud providers, crypto wallets, and AI API keys all in one sweep reflects broad model 'knowledge' being applied on the fly."
+    },
+    {
+      time: "10:07:18",
+      text: "subprocess call fails on a permission error. 31 seconds later, a corrected payload with an adjusted privilege-escalation path is deployed.",
+      correct: "ai",
+      explain: "Diagnosing the root cause of a failure and shipping a fix in 31 seconds, with nobody watching a terminal, is the kind of tight fail→diagnose→retry loop that marks an autonomous agent, not a person context-switching between tools."
+    },
+    {
+      time: "10:09:55",
+      text: "600+ distinct, purpose-built payloads executed in rapid sequence against MySQL, Nacos, SSH, and the cloud metadata endpoint.",
+      correct: "ai",
+      explain: "That volume and variety, sustained back-to-back with real intent behind each one rather than brute-force repetition, is machine-speed operation — a human operator working this many distinct techniques this fast is implausible."
+    },
+    {
+      time: "10:14:02",
+      text: "Lateral movement pivots from the Langflow host to an unrelated production server via a harvested SSH key.",
+      correct: "human",
+      explain: "Pivoting with a stolen key is textbook post-exploitation — any competent attacker, human or not, does this. Nothing here distinguishes an agent from a person."
+    },
+    {
+      time: "10:22:47",
+      text: "1,342 Nacos configuration records encrypted; original tables dropped immediately after.",
+      correct: "human",
+      explain: "Encrypt-then-destroy is standard ransomware behavior. It's the ransom note that follows where things get interesting."
+    },
+    {
+      time: "10:23:10",
+      text: "Ransom note dropped, demanding payment to Bitcoin address 3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy.",
+      correct: "ai",
+      explain: "That address isn't a criminal's wallet — it's the canonical example Pay-to-Script-Hash address reproduced across Bitcoin's own developer docs and the Bitcoin Core repo. A profit-driven human never operationalizes a demand on an address they don't own; an LLM that memorized the internet's most common example address absolutely can."
+    },
+    {
+      time: "10:23:11",
+      text: "Encryption key generated via os.urandom(32), used once, never written to disk, memory dumps, or exfiltrated anywhere.",
+      correct: "ai",
+      explain: "Ransomware is a business — real operators always retain or escrow the key, because getting paid depends on it. An agent that completed 'encrypt the data' as a task without modeling the downstream extortion economics threw away the one thing that makes this a viable crime."
+    },
+    {
+      time: "10:24:00",
+      text: "No C2 checkback, no affiliate panel login, no negotiation chat link anywhere in the note.",
+      correct: "ai",
+      explain: "Human-run ransomware-as-a-service comes with infrastructure: leak sites, negotiation portals, affiliate tracking. None of that exists here — just a task, executed and considered done."
+    }
+  ];
+
+  let idx = 0;
+  let score = 0;
+  let answered = false;
+
+  const introScreen = document.getElementById('intro-screen');
+  const gameScreen = document.getElementById('game');
+  const endScreen = document.getElementById('end-screen');
+  const dotsEl = document.getElementById('dots');
+  const consoleLine = document.getElementById('console-line');
+  const progressText = document.getElementById('progress-text');
+  const liveScore = document.getElementById('live-score');
+  const pickAiBtn = document.getElementById('pick-ai');
+  const pickHumanBtn = document.getElementById('pick-human');
+  const revealEl = document.getElementById('reveal');
+  const verdictBadge = document.getElementById('verdict-badge');
+  const explainText = document.getElementById('explain-text');
+  const nextBtn = document.getElementById('next-btn');
+
+  function buildDots() {
+    dotsEl.innerHTML = '';
+    DATA.forEach((_, i) => {
+      const d = document.createElement('div');
+      d.className = 'dot';
+      d.dataset.i = i;
+      dotsEl.appendChild(d);
+    });
+  }
+
+  function renderEntry() {
+    answered = false;
+    const item = DATA[idx];
+    progressText.textContent = `Entry ${idx + 1} / ${DATA.length}`;
+    consoleLine.innerHTML = `<span class="ts">[${item.time}]</span> ${escapeHtml(item.text)} <span class="cursor">&nbsp;</span>`;
+    revealEl.classList.remove('show');
+    nextBtn.style.display = 'none';
+    pickAiBtn.disabled = false;
+    pickHumanBtn.disabled = false;
+    pickAiBtn.classList.remove('correct-pick', 'wrong-pick');
+    pickHumanBtn.classList.remove('correct-pick', 'wrong-pick');
+
+    [...dotsEl.children].forEach((d, i) => {
+      d.classList.remove('current', 'done-ai', 'done-human');
+      if (i === idx) d.classList.add('current');
+    });
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  function handlePick(pick) {
+    if (answered) return;
+    answered = true;
+    const item = DATA[idx];
+    const correct = pick === item.correct;
+    if (correct) score++;
+
+    const chosenBtn = pick === 'ai' ? pickAiBtn : pickHumanBtn;
+    const otherBtn = pick === 'ai' ? pickHumanBtn : pickAiBtn;
+    chosenBtn.classList.add(correct ? 'correct-pick' : 'wrong-pick');
+    if (!correct) {
+      otherBtn.classList.add('correct-pick');
+    }
+    pickAiBtn.disabled = true;
+    pickHumanBtn.disabled = true;
+
+    verdictBadge.textContent = item.correct === 'ai' ? '🤖 AI tell' : '🧑 Ordinary tradecraft';
+    verdictBadge.className = 'verdict ' + (item.correct === 'ai' ? 'ai' : 'human');
+    explainText.textContent = item.explain;
+    revealEl.classList.add('show');
+
+    const dot = dotsEl.children[idx];
+    dot.classList.remove('current');
+    dot.classList.add(item.correct === 'ai' ? 'done-ai' : 'done-human');
+
+    liveScore.textContent = score;
+    nextBtn.style.display = 'block';
+  }
+
+  function next() {
+    idx++;
+    if (idx >= DATA.length) {
+      showEnd();
+    } else {
+      renderEntry();
+    }
+  }
+
+  function showEnd() {
+    gameScreen.classList.remove('active');
+    endScreen.classList.remove('hidden');
+    document.getElementById('final-score').textContent = score;
+    let caption;
+    if (score === DATA.length) caption = "Perfect read. You spotted every machine tell in the log.";
+    else if (score >= 7) caption = "Sharp eye — you caught most of the signs an autonomous agent was behind the keyboard.";
+    else if (score >= 4) caption = "Decent instincts, but a few machine-speed tells slipped past.";
+    else caption = "This attack chain fooled a lot of humans too — that's exactly why it made news.";
+    document.getElementById('score-caption').textContent = caption;
+  }
+
+  function restart() {
+    idx = 0;
+    score = 0;
+    liveScore.textContent = '0';
+    endScreen.classList.add('hidden');
+    gameScreen.classList.add('active');
+    buildDots();
+    renderEntry();
+  }
+
+  document.getElementById('start-btn').addEventListener('click', () => {
+    introScreen.classList.add('hidden');
+    gameScreen.classList.add('active');
+    buildDots();
+    renderEntry();
+  });
+  pickAiBtn.addEventListener('click', () => handlePick('ai'));
+  pickHumanBtn.addEventListener('click', () => handlePick('human'));
+  nextBtn.addEventListener('click', next);
+  document.getElementById('restart-btn').addEventListener('click', restart);
+})();
+</script>
+</body>
+</html>
