@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MCP Bridge Defense Console — CVE-2026-59726 Interactive</title>
+<style>
+  :root{
+    --bg:#0b0f14;
+    --panel:#121821;
+    --panel2:#161d28;
+    --border:#233040;
+    --text:#dbe6f0;
+    --muted:#7f93a8;
+    --accent:#38d6c0;
+    --accent2:#7c9fff;
+    --danger:#ff5d6c;
+    --danger-bg:#3a1620;
+    --ok:#4fd680;
+    --ok-bg:#123322;
+    --warn:#ffb454;
+    --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:radial-gradient(1200px 800px at 50% -10%, #14202c 0%, var(--bg) 60%);
+    color:var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height:1.5;
+    min-height:100vh;
+    padding: 32px 16px 64px;
+  }
+  .wrap{max-width:920px;margin:0 auto;}
+  header{text-align:center;margin-bottom:28px;}
+  .badge{
+    display:inline-block;
+    font-family:var(--mono);
+    font-size:12px;
+    letter-spacing:.05em;
+    color:var(--danger);
+    background:var(--danger-bg);
+    border:1px solid #5a2530;
+    padding:4px 10px;
+    border-radius:999px;
+    margin-bottom:14px;
+  }
+  h1{
+    font-size:1.7rem;
+    margin:0 0 10px;
+    line-height:1.25;
+  }
+  header p{
+    color:var(--muted);
+    max-width:640px;
+    margin:0 auto;
+    font-size:0.98rem;
+  }
+  .grid{
+    display:grid;
+    grid-template-columns: 1fr 1fr;
+    gap:18px;
+    margin-top:28px;
+  }
+  @media (max-width:760px){ .grid{grid-template-columns:1fr;} }
+
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:20px;
+  }
+  .panel h2{
+    font-size:1rem;
+    margin:0 0 4px;
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .panel h2 .icon{font-size:1.1rem;}
+  .panel .sub{color:var(--muted); font-size:0.85rem; margin-bottom:16px;}
+
+  .toggle-row{
+    display:flex;
+    align-items:flex-start;
+    justify-content:space-between;
+    gap:12px;
+    padding:12px 0;
+    border-top:1px solid var(--border);
+  }
+  .toggle-row:first-of-type{border-top:none;}
+  .toggle-text{flex:1;}
+  .toggle-text .label{font-weight:600; font-size:0.92rem;}
+  .toggle-text .desc{color:var(--muted); font-size:0.8rem; margin-top:3px;}
+
+  .switch{
+    position:relative;
+    width:46px;
+    height:26px;
+    flex:none;
+    cursor:pointer;
+  }
+  .switch input{opacity:0; width:0; height:0; position:absolute;}
+  .slider{
+    position:absolute; inset:0;
+    background:#3a2126;
+    border:1px solid var(--danger);
+    border-radius:999px;
+    transition:.2s;
+  }
+  .slider::before{
+    content:"";
+    position:absolute;
+    height:18px; width:18px;
+    left:3px; top:3px;
+    background:var(--danger);
+    border-radius:50%;
+    transition:.2s;
+  }
+  input:checked + .slider{
+    background:#123322;
+    border-color:var(--ok);
+  }
+  input:checked + .slider::before{
+    background:var(--ok);
+    transform:translateX(20px);
+  }
+
+  .score-bar{
+    display:flex; align-items:center; gap:10px;
+    margin:6px 0 18px;
+  }
+  .score-track{
+    flex:1; height:10px; border-radius:999px;
+    background:#1c2632; overflow:hidden; border:1px solid var(--border);
+  }
+  .score-fill{
+    height:100%; width:0%;
+    background:linear-gradient(90deg, var(--danger), var(--warn) 55%, var(--ok));
+    transition:width .35s ease;
+  }
+  .score-label{font-family:var(--mono); font-size:0.85rem; color:var(--muted); white-space:nowrap;}
+
+  .attack-btn{
+    width:100%;
+    margin-top:6px;
+    padding:12px;
+    border-radius:10px;
+    border:1px solid var(--accent2);
+    background:linear-gradient(180deg, #1b2740, #131c30);
+    color:var(--text);
+    font-size:0.95rem;
+    font-weight:600;
+    cursor:pointer;
+    transition:transform .1s ease, box-shadow .15s ease;
+  }
+  .attack-btn:hover{ box-shadow:0 0 0 3px rgba(124,159,255,0.15); }
+  .attack-btn:active{ transform:scale(0.98); }
+
+  .console{
+    margin-top:14px;
+    background:#070a0e;
+    border:1px solid var(--border);
+    border-radius:10px;
+    padding:14px;
+    font-family:var(--mono);
+    font-size:0.8rem;
+    color:#9db3c4;
+    min-height:150px;
+    max-height:260px;
+    overflow-y:auto;
+    white-space:pre-wrap;
+  }
+  .console .line{margin-bottom:4px;}
+  .console .req{color:var(--accent2);}
+  .console .fail{color:var(--danger);}
+  .console .pass{color:var(--ok);}
+  .console .info{color:var(--muted);}
+
+  .verdict{
+    margin-top:14px;
+    padding:14px;
+    border-radius:10px;
+    font-size:0.9rem;
+    font-weight:600;
+    display:none;
+  }
+  .verdict.show{display:block;}
+  .verdict.breach{ background:var(--danger-bg); border:1px solid #5a2530; color:#ffb0ba;}
+  .verdict.safe{ background:var(--ok-bg); border:1px solid #1f5c3a; color:#a9f0c4;}
+
+  .quiz-q{
+    margin-bottom:20px;
+    padding-bottom:16px;
+    border-bottom:1px solid var(--border);
+  }
+  .quiz-q:last-of-type{border-bottom:none; margin-bottom:0; padding-bottom:0;}
+  .quiz-q p.q{font-weight:600; margin:0 0 10px; font-size:0.92rem;}
+  .opt{
+    display:block;
+    padding:9px 12px;
+    margin-bottom:7px;
+    border:1px solid var(--border);
+    border-radius:8px;
+    cursor:pointer;
+    font-size:0.86rem;
+    background:var(--panel2);
+    transition:border-color .15s ease, background .15s ease;
+  }
+  .opt:hover{border-color:var(--accent2);}
+  .opt input{margin-right:8px;}
+  .opt.correct{border-color:var(--ok); background:var(--ok-bg);}
+  .opt.incorrect{border-color:var(--danger); background:var(--danger-bg);}
+  .opt.locked{cursor:default; pointer-events:none;}
+  .explain{
+    font-size:0.8rem;
+    color:var(--muted);
+    margin-top:8px;
+    display:none;
+    padding:8px 10px;
+    background:#0d131b;
+    border-left:2px solid var(--accent);
+    border-radius:4px;
+  }
+  .explain.show{display:block;}
+
+  .quiz-result{
+    margin-top:18px;
+    padding:14px;
+    border-radius:10px;
+    background:var(--panel2);
+    border:1px solid var(--border);
+    font-size:0.9rem;
+    text-align:center;
+    display:none;
+  }
+  .quiz-result.show{display:block;}
+  .quiz-btn{
+    display:block;
+    width:100%;
+    margin-top:4px;
+    padding:11px;
+    border-radius:10px;
+    border:1px solid var(--accent);
+    background:transparent;
+    color:var(--accent);
+    font-weight:600;
+    cursor:pointer;
+    font-size:0.9rem;
+  }
+  .quiz-btn:hover{ background:rgba(56,214,192,0.08); }
+
+  footer{
+    text-align:center;
+    margin-top:36px;
+    color:var(--muted);
+    font-size:0.78rem;
+  }
+  footer a{color:var(--accent2);}
+  .full-panel{grid-column:1 / -1;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <span class="badge">CVE-2026-59726 · CVSS 10.0</span>
+    <h1>MCP Bridge Defense Console</h1>
+    <p>On July 29, 2026, researchers disclosed a critical unauthenticated RCE in Ruflo's default MCP bridge deployment. Flip the same five settings the real fix touched, then fire a simulated attack to see whether your configuration would have survived.</p>
+  </header>
+
+  <div class="grid">
+    <div class="panel">
+      <h2><span class="icon">⚙️</span> docker-compose.yml — bridge config</h2>
+      <div class="sub">Toggle each setting between the vulnerable default and the patched (v3.16.3+) behavior.</div>
+
+      <div class="score-bar">
+        <div class="score-track"><div class="score-fill" id="scoreFill"></div></div>
+        <div class="score-label" id="scoreLabel">0/5 hardened</div>
+      </div>
+
+      <div class="toggle-row">
+        <div class="toggle-text">
+          <div class="label">Network binding</div>
+          <div class="desc" id="desc-bind">0.0.0.0:3001 — reachable from any network interface</div>
+        </div>
+        <label class="switch"><input type="checkbox" data-check="bind"><span class="slider"></span></label>
+      </div>
+
+      <div class="toggle-row">
+        <div class="toggle-text">
+          <div class="label">MCP endpoint auth</div>
+          <div class="desc" id="desc-auth">POST /mcp and /mcp/:group accept requests with no token</div>
+        </div>
+        <label class="switch"><input type="checkbox" data-check="auth"><span class="slider"></span></label>
+      </div>
+
+      <div class="toggle-row">
+        <div class="toggle-text">
+          <div class="label">terminal_execute gating</div>
+          <div class="desc" id="desc-gate">Blocklist only enforced in the autopilot UI flow</div>
+        </div>
+        <label class="switch"><input type="checkbox" data-check="gate"><span class="slider"></span></label>
+      </div>
+
+      <div class="toggle-row">
+        <div class="toggle-text">
+          <div class="label">AgentDB / MongoDB auth</div>
+          <div class="desc" id="desc-db">Learning-store database accepts unauthenticated connections</div>
+        </div>
+        <label class="switch"><input type="checkbox" data-check="db"><span class="slider"></span></label>
+      </div>
+
+      <div class="toggle-row">
+        <div class="toggle-text">
+          <div class="label">Container filesystem</div>
+          <div class="desc" id="desc-fs">Read-write root filesystem inside the bridge container</div>
+        </div>
+        <label class="switch"><input type="checkbox" data-check="fs"><span class="slider"></span></label>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2><span class="icon">🕵️</span> Attacker simulation</h2>
+      <div class="sub">Simulates an unauthenticated <code>tools/call → terminal_execute</code> request hitting your configured bridge, the way RufRoot actually worked.</div>
+      <button class="attack-btn" id="attackBtn">▶ Send POST /mcp/tools/call terminal_execute</button>
+      <div class="console" id="console"><div class="line info">// Configure the bridge on the left, then launch the request.</div></div>
+      <div class="verdict" id="verdict"></div>
+    </div>
+
+    <div class="panel full-panel">
+      <h2><span class="icon">📝</span> Quick check: did you catch the details?</h2>
+      <div class="sub">Four questions based directly on the CVE-2026-59726 disclosure.</div>
+      <div id="quiz"></div>
+      <button class="quiz-btn" id="quizSubmit">Check my answers</button>
+      <div class="quiz-result" id="quizResult"></div>
+    </div>
+  </div>
+
+  <footer>
+    Companion to a blog post on CVE-2026-59726 (the Ruflo MCP bridge flaw). Sources: The Hacker News, Noma Security ("RufRoot"), and the ruflo GitHub Security Advisory GHSA-c4hm-4h84-2cf3. No network requests are made by this page — everything here is a local simulation.
+  </footer>
+</div>
+
+<script>
+(function(){
+  var checks = { bind:false, auth:false, gate:false, db:false, fs:false };
+
+  var descriptions = {
+    bind: { off: "0.0.0.0:3001 — reachable from any network interface", on: "127.0.0.1:3001 — loopback only, not reachable externally" },
+    auth: { off: "POST /mcp and /mcp/:group accept requests with no token", on: "Bearer token required, checked with constant-time comparison" },
+    gate: { off: "Blocklist only enforced in the autopilot UI flow", on: "terminal_execute gated server-side via executeTool, for every caller" },
+    db:   { off: "Learning-store database accepts unauthenticated connections", on: "MongoDB authentication enabled by default" },
+    fs:   { off: "Read-write root filesystem inside the bridge container", on: "Read-only root filesystem, writable only via tmpfs" }
+  };
+
+  var toggles = document.querySelectorAll('input[data-check]');
+  toggles.forEach(function(t){
+    t.addEventListener('change', function(){
+      var key = t.getAttribute('data-check');
+      checks[key] = t.checked;
+      var d = descriptions[key];
+      document.getElementById('desc-' + key).textContent = t.checked ? d.on : d.off;
+      updateScore();
+    });
+  });
+
+  function updateScore(){
+    var count = Object.values(checks).filter(Boolean).length;
+    document.getElementById('scoreFill').style.width = (count/5*100) + '%';
+    document.getElementById('scoreLabel').textContent = count + '/5 hardened';
+  }
+
+  var consoleEl = document.getElementById('console');
+  var verdictEl = document.getElementById('verdict');
+
+  function log(text, cls){
+    var line = document.createElement('div');
+    line.className = 'line' + (cls ? ' ' + cls : '');
+    line.textContent = text;
+    consoleEl.appendChild(line);
+    consoleEl.scrollTop = consoleEl.scrollHeight;
+  }
+
+  document.getElementById('attackBtn').addEventListener('click', function(){
+    consoleEl.innerHTML = '';
+    verdictEl.className = 'verdict';
+    verdictEl.textContent = '';
+
+    log('$ curl -X POST http://TARGET:3001/mcp \\', 'req');
+    log('    -d \'{"method":"tools/call","params":{"name":"terminal_execute", ...}}\'', 'req');
+
+    setTimeout(function(){
+      if(!checks.bind){
+        log('[net] port 3001 reachable on public interface (0.0.0.0)', 'fail');
+      } else {
+        log('[net] connection refused — bridge bound to 127.0.0.1 only', 'pass');
+        finish(true, 'Blocked at the network layer — the request never even reached the MCP bridge. This is the single highest-leverage fix: an attacker with no route in can\'t exploit anything downstream.');
+        return;
+      }
+
+      setTimeout(function(){
+        if(!checks.auth){
+          log('[auth] no Authorization header required — request accepted', 'fail');
+        } else {
+          log('[auth] 401 Unauthorized — missing bearer token', 'pass');
+          finish(true, 'Blocked at the authentication layer. Even though the port was reachable, the bridge correctly rejected the unauthenticated call.');
+          return;
+        }
+
+        setTimeout(function(){
+          if(!checks.gate){
+            log('[policy] terminal_execute invoked directly via /mcp — blocklist not enforced outside autopilot flow', 'fail');
+          } else {
+            log('[policy] executeTool guard rejects terminal_execute for this caller', 'pass');
+            finish(true, 'Blocked at the policy layer, right where RufRoot actually slipped through in the vulnerable version. Enforcing the guardrail at the tool-serving boundary — not just in the UI flow — closes the real gap.');
+            return;
+          }
+
+          setTimeout(function(){
+            log('[exec] shell obtained in bridge container as `node`', 'fail');
+            log('[creds] provider API keys read from container environment', 'fail');
+            if(checks.db){
+              log('[agentdb] MongoDB auth enforced — learning store NOT poisoned', 'pass');
+            } else {
+              log('[agentdb] unauthenticated write to learning-store patterns — future agent outputs compromised', 'fail');
+            }
+            if(checks.fs){
+              log('[fs] read-only rootfs — attacker cannot persist a backdoor in the container', 'pass');
+            } else {
+              log('[fs] writable rootfs — attacker plants persistence', 'fail');
+            }
+            var full = checks.db && checks.fs;
+            finish(false, full
+              ? 'Full remote shell achieved (CVSS 10.0 conditions met), but database and filesystem hardening limited the blast radius — no memory poisoning, no persistence.'
+              : 'Full compromise: remote shell, stolen API keys, and — without DB/filesystem hardening — a poisoned AgentDB that can steer every future agent output. This is exactly the pre-3.16.3 outcome.');
+          }, 350);
+        }, 350);
+      }, 350);
+    }, 350);
+  });
+
+  function finish(safe, message){
+    verdictEl.classList.add('show');
+    verdictEl.classList.add(safe ? 'safe' : 'breach');
+    verdictEl.textContent = (safe ? '✅ Attack blocked. ' : '🚨 Compromise achieved. ') + message;
+  }
+
+  // ---- Quiz ----
+  var QUESTIONS = [
+    {
+      q: "What was the root cause that let the terminal_execute blocklist be bypassed?",
+      options: [
+        "The blocklist was only enforced in the autopilot UI flow, not at the MCP HTTP endpoints",
+        "The blocklist used a weak regular expression",
+        "The blocklist was disabled during a debugging session",
+        "There was no blocklist at all in any version"
+      ],
+      correct: 0,
+      explain: "The advisory notes the tool blocklist 'was enforced only in the autopilot flow' — requests hitting POST /mcp directly skipped it entirely. The fix moved enforcement to the server-side executeTool layer, covering every caller."
+    },
+    {
+      q: "What was the default network binding that exposed the MCP bridge?",
+      options: [
+        "127.0.0.1:3001 (loopback only)",
+        "0.0.0.0:3001 (all interfaces)",
+        "A Unix domain socket with file permissions",
+        "It required a VPN connection by default"
+      ],
+      correct: 1,
+      explain: "The default docker-compose.yml bound port 3001 to 0.0.0.0, exposing the bridge on every network interface instead of restricting it to the local machine."
+    },
+    {
+      q: "Besides shell access and API key theft, what other unique impact did this flaw enable?",
+      options: [
+        "Deleting the attacker's own cloud billing records",
+        "Poisoning the AgentDB learning store, potentially steering future AI outputs for all users",
+        "Bypassing two-factor authentication on GitHub",
+        "Rewriting the Claude Code model weights directly"
+      ],
+      correct: 1,
+      explain: "Because the MongoDB-backed AgentDB learning store was also unauthenticated, an attacker could inject poisoned patterns that persist and influence future agent behavior across users — a memory-poisoning-style compromise on top of the RCE."
+    },
+    {
+      q: "How quickly did the maintainer patch the flaw after responsible disclosure?",
+      options: [
+        "About 6 months",
+        "Roughly 24 hours",
+        "It was never patched",
+        "Immediately, before disclosure even happened"
+      ],
+      correct: 1,
+      explain: "Noma Labs disclosed the issue on June 30, 2026, and maintainer Reuven Cohen shipped a fix within 24 hours, released as version 3.16.3 with hardening documented under ADR-166."
+    }
+  ];
+
+  var quizEl = document.getElementById('quiz');
+  var userAnswers = new Array(QUESTIONS.length).fill(null);
+
+  QUESTIONS.forEach(function(item, qi){
+    var block = document.createElement('div');
+    block.className = 'quiz-q';
+
+    var p = document.createElement('p');
+    p.className = 'q';
+    p.textContent = (qi+1) + '. ' + item.q;
+    block.appendChild(p);
+
+    item.options.forEach(function(opt, oi){
+      var label = document.createElement('label');
+      label.className = 'opt';
+      var input = document.createElement('input');
+      input.type = 'radio';
+      input.name = 'q' + qi;
+      input.value = oi;
+      input.addEventListener('change', function(){ userAnswers[qi] = oi; });
+      label.appendChild(input);
+      label.appendChild(document.createTextNode(opt));
+      block.appendChild(label);
+    });
+
+    var explain = document.createElement('div');
+    explain.className = 'explain';
+    explain.id = 'explain' + qi;
+    explain.textContent = item.explain;
+    block.appendChild(explain);
+
+    quizEl.appendChild(block);
+  });
+
+  document.getElementById('quizSubmit').addEventListener('click', function(){
+    var score = 0;
+    QUESTIONS.forEach(function(item, qi){
+      var opts = quizEl.querySelectorAll('.quiz-q')[qi].querySelectorAll('.opt');
+      var inputs = quizEl.querySelectorAll('.quiz-q')[qi].querySelectorAll('input');
+      inputs.forEach(function(inp){ inp.disabled = true; });
+      opts.forEach(function(o){ o.classList.add('locked'); });
+
+      if(userAnswers[qi] === item.correct){ score++; }
+
+      opts[item.correct].classList.add('correct');
+      if(userAnswers[qi] !== null && userAnswers[qi] !== item.correct){
+        opts[userAnswers[qi]].classList.add('incorrect');
+      }
+      document.getElementById('explain' + qi).classList.add('show');
+    });
+
+    var resultEl = document.getElementById('quizResult');
+    resultEl.classList.add('show');
+    var msg;
+    if(score === QUESTIONS.length){ msg = '🏆 ' + score + '/' + QUESTIONS.length + ' — you read the advisory closely.'; }
+    else if(score >= QUESTIONS.length/2){ msg = '👍 ' + score + '/' + QUESTIONS.length + ' — solid grasp, check the explanations above for the rest.'; }
+    else { msg = '📚 ' + score + '/' + QUESTIONS.length + ' — worth a re-read of the disclosure, explanations are above.'; }
+    resultEl.textContent = msg;
+    document.getElementById('quizSubmit').disabled = true;
+    document.getElementById('quizSubmit').style.opacity = '0.5';
+    document.getElementById('quizSubmit').style.cursor = 'default';
+  });
+
+  updateScore();
+})();
+</script>
+</body>
+</html>
