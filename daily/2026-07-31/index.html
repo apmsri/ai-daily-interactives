@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SOC Autopilot — Agent Governance Simulator</title>
+<style>
+  :root{
+    --bg:#0a0e13;
+    --panel:#111721;
+    --panel2:#151d29;
+    --border:#22303f;
+    --text:#dce6f0;
+    --muted:#7d92a8;
+    --accent:#5fd0ff;
+    --red:#ff6b6b;
+    --red-bg:#331a1c;
+    --blue:#5fa8ff;
+    --blue-bg:#152238;
+    --green:#4fd68a;
+    --green-bg:#0f2a20;
+    --warn:#ffb454;
+    --ok:#4fd68a;
+    --bad:#ff6b6b;
+    --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:radial-gradient(1200px 800px at 50% -10%, #131c27 0%, var(--bg) 60%);
+    color:var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height:1.5;
+    min-height:100vh;
+    padding: 32px 16px 64px;
+  }
+  .wrap{max-width:760px;margin:0 auto;}
+  header{text-align:center;margin-bottom:26px;}
+  .badge{
+    display:inline-block;
+    font-family:var(--mono);
+    font-size:12px;
+    letter-spacing:.05em;
+    color:var(--accent);
+    background:#0f2530;
+    border:1px solid #1f4a5a;
+    padding:4px 10px;
+    border-radius:999px;
+    margin-bottom:14px;
+  }
+  h1{font-size:1.65rem;margin:0 0 10px;line-height:1.28;}
+  header p{color:var(--muted);max-width:600px;margin:0 auto;font-size:0.96rem;}
+  header p a{color:var(--accent);}
+
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:22px;
+    margin-bottom:18px;
+    box-shadow:0 10px 30px rgba(0,0,0,.25);
+  }
+
+  /* Progress + score bar */
+  .statusbar{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    margin-bottom:18px;
+    font-family:var(--mono);
+    font-size:12.5px;
+    color:var(--muted);
+  }
+  .progress-track{
+    flex:1;
+    height:6px;
+    background:var(--panel2);
+    border:1px solid var(--border);
+    border-radius:999px;
+    overflow:hidden;
+  }
+  .progress-fill{
+    height:100%;
+    width:0%;
+    background:linear-gradient(90deg, var(--blue), var(--accent));
+    transition:width .35s ease;
+  }
+  .score{white-space:nowrap;}
+  .score b{color:var(--text);}
+
+  /* Scenario card */
+  .agent-row{display:flex;align-items:center;gap:10px;margin-bottom:14px;}
+  .agent-chip{
+    font-family:var(--mono);
+    font-size:11.5px;
+    letter-spacing:.06em;
+    font-weight:700;
+    padding:5px 10px;
+    border-radius:6px;
+    border:1px solid transparent;
+  }
+  .agent-chip.RED{color:var(--red);background:var(--red-bg);border-color:#4a2226;}
+  .agent-chip.BLUE{color:var(--blue);background:var(--blue-bg);border-color:#1f3455;}
+  .agent-chip.GREEN{color:var(--green);background:var(--green-bg);border-color:#1c4432;}
+  .counter{color:var(--muted);font-family:var(--mono);font-size:12px;margin-left:auto;}
+
+  .scenario-title{font-size:1.15rem;font-weight:600;margin:0 0 8px;color:var(--text);}
+  .scenario-desc{color:#b8c6d4;font-size:0.98rem;margin:0 0 20px;}
+
+  .choices{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  @media (max-width:520px){.choices{grid-template-columns:1fr;}}
+  .choice-btn{
+    font:inherit;
+    font-size:0.98rem;
+    font-weight:600;
+    padding:14px 12px;
+    border-radius:10px;
+    border:1px solid var(--border);
+    background:var(--panel2);
+    color:var(--text);
+    cursor:pointer;
+    transition:transform .08s ease, border-color .15s ease, background .15s ease;
+    text-align:center;
+  }
+  .choice-btn:hover:not(:disabled){transform:translateY(-1px);border-color:var(--accent);}
+  .choice-btn:disabled{cursor:default;}
+  .choice-btn.approve{border-color:#1c4432;}
+  .choice-btn.escalate{border-color:#4a2226;}
+
+  .choice-btn.correct{background:var(--green-bg);border-color:var(--ok);color:#c9f5dd;}
+  .choice-btn.incorrect{background:var(--red-bg);border-color:var(--bad);color:#ffd8d8;}
+  .choice-btn.reveal{opacity:.55;}
+
+  .feedback{
+    margin-top:18px;
+    padding:14px 16px;
+    border-radius:10px;
+    border:1px solid var(--border);
+    background:var(--panel2);
+    font-size:0.93rem;
+    color:#c3d2e0;
+    display:none;
+  }
+  .feedback.show{display:block;}
+  .feedback .verdict{
+    font-family:var(--mono);
+    font-size:12px;
+    letter-spacing:.05em;
+    font-weight:700;
+    display:block;
+    margin-bottom:6px;
+  }
+  .feedback .verdict.ok{color:var(--ok);}
+  .feedback .verdict.bad{color:var(--bad);}
+
+  .next-btn{
+    margin-top:16px;
+    font:inherit;
+    font-weight:700;
+    font-size:0.95rem;
+    padding:11px 20px;
+    border-radius:8px;
+    border:1px solid #1f4a5a;
+    background:#0f2530;
+    color:var(--accent);
+    cursor:pointer;
+    display:none;
+  }
+  .next-btn.show{display:inline-block;}
+  .next-btn:hover{background:#123244;}
+
+  /* Results screen */
+  .results{display:none;text-align:center;}
+  .results.show{display:block;}
+  .results .big-score{font-size:3rem;font-weight:800;margin:6px 0 4px;color:var(--accent);}
+  .results .big-score span{font-size:1.3rem;color:var(--muted);font-weight:600;}
+  .results h2{margin:0 0 6px;font-size:1.3rem;}
+  .results p.tag{color:var(--muted);font-size:0.95rem;margin:0 0 20px;}
+  .results .summary-box{
+    text-align:left;
+    background:var(--panel2);
+    border:1px solid var(--border);
+    border-radius:10px;
+    padding:16px 18px;
+    font-size:0.92rem;
+    color:#c3d2e0;
+    margin-bottom:20px;
+  }
+  .results .summary-box strong{color:var(--text);}
+  .restart-btn{
+    font:inherit;font-weight:700;font-size:0.95rem;
+    padding:12px 24px;border-radius:8px;border:1px solid #1f4a5a;
+    background:#0f2530;color:var(--accent);cursor:pointer;
+  }
+  .restart-btn:hover{background:#123244;}
+
+  .game{display:block;}
+  .game.hide{display:none;}
+
+  footer{text-align:center;color:var(--muted);font-size:0.82rem;margin-top:22px;}
+  footer a{color:var(--muted);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <span class="badge">AGENTIC SECURITY // GOVERNANCE SIM</span>
+    <h1>SOC Autopilot: Agent Governance Simulator</h1>
+    <p>You're the human-in-the-loop for a fleet of autonomous Red / Blue / Green security agents. For each proposed action, decide: does the agent act on its own, or does it stop for your sign-off? The rule that matters isn't "how scary does this sound" — it's how easily the action can be undone.</p>
+  </header>
+
+  <div class="panel game" id="game">
+    <div class="statusbar">
+      <span id="counterLabel">Scenario 1 / 12</span>
+      <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+      <span class="score">Score: <b id="scoreLabel">0</b>/12</span>
+    </div>
+
+    <div class="agent-row">
+      <span class="agent-chip" id="agentChip">AGENT</span>
+      <span class="counter" id="agentSubLabel"></span>
+    </div>
+
+    <h2 class="scenario-title" id="scenarioTitle"></h2>
+    <p class="scenario-desc" id="scenarioDesc"></p>
+
+    <div class="choices" id="choices">
+      <button class="choice-btn approve" id="btnApprove" onclick="choose('approve')">✅ Auto-Approve<br><small style="font-weight:400;color:var(--muted);">Agent acts immediately</small></button>
+      <button class="choice-btn escalate" id="btnEscalate" onclick="choose('escalate')">🛑 Escalate to Human<br><small style="font-weight:400;color:var(--muted);">Wait for sign-off</small></button>
+    </div>
+
+    <div class="feedback" id="feedback">
+      <span class="verdict" id="verdictLabel"></span>
+      <span id="feedbackText"></span>
+    </div>
+
+    <button class="next-btn" id="nextBtn" onclick="nextScenario()">Next scenario →</button>
+  </div>
+
+  <div class="panel results" id="results">
+    <h2 id="resultsHeading"></h2>
+    <p class="tag">out of 12 governance calls</p>
+    <div class="big-score"><span id="finalScore">0</span><span>/12</span></div>
+    <div class="summary-box">
+      <strong>The real-world model:</strong> This mirrors how Microsoft's Project Perception (announced July 27, 2026) actually gates its Red/Blue/Green agents. Trivially reversible, contained actions — isolating one machine, rotating a compromised key, blocking a known-bad IP — are candidates for autonomous execution. Actions that are hard to undo or carry real blast radius — patching a live production host, deleting data, running exploits against production, touching systems outside clear scope — stay behind a human sign-off, at least until the system has "earned the right" to more autonomy, in the words of Microsoft's David Weston, corporate VP of AI security.
+    </div>
+    <button class="restart-btn" onclick="restart()">Run it again</button>
+  </div>
+
+  <footer>Fictional scenarios inspired by real reporting on Microsoft's Project Perception (July 27, 2026). No real systems, data, or credentials involved.</footer>
+</div>
+
+<script>
+const SCENARIOS = [
+  {
+    agent: "RED", agentLabel: "Red Agent · Reconnaissance",
+    title: "Public storage bucket, no sensitive data",
+    desc: "A red agent finds a cloud storage bucket with public read access during a routine sweep. Blue agent confirms it contains only static marketing assets — no sensitive data. Green agent proposes revoking public access immediately.",
+    answer: "approve",
+    explain: "Closing public access on an empty-of-risk bucket is trivially reversible — you can flip it back in seconds if it breaks something. Low blast radius, low stakes: a textbook case for autonomous action."
+  },
+  {
+    agent: "GREEN", agentLabel: "Green Agent · Remediation",
+    title: "Patch a live production database engine",
+    desc: "A green agent has a tested patch for a critical vulnerability in the production database engine. Deploying it requires a maintenance window and will briefly interrupt live customer traffic.",
+    answer: "escalate",
+    explain: "Customer-facing downtime and a live production system make this expensive to get wrong and hard to fully undo. This is exactly the class of action Microsoft keeps gated behind human approval — capability isn't the same as authorization to act unsupervised."
+  },
+  {
+    agent: "BLUE", agentLabel: "Blue Agent · Triage",
+    title: "Suspicious login, single account",
+    desc: "A blue agent flags a login from an unrecognized country for one employee account. It proposes forcing a password reset and revoking that user's active sessions — nothing else.",
+    answer: "approve",
+    explain: "Contained to a single account, and password resets are a routine, reversible incident-response action. The blast radius is one user, not the environment."
+  },
+  {
+    agent: "GREEN", agentLabel: "Green Agent · Remediation",
+    title: "Delete an 'unused' storage bucket",
+    desc: "A green agent identifies a storage bucket with no read/write activity in 90 days and proposes deleting it to reduce attack surface.",
+    answer: "escalate",
+    explain: "Deletion is the least reversible action there is. 'No activity in 90 days' isn't proof nothing depends on it — a human needs to confirm before data is destroyed, not after."
+  },
+  {
+    agent: "RED", agentLabel: "Red Agent · Reconnaissance",
+    title: "Run a live exploit against production to confirm a bug is real",
+    desc: "A red agent found what looks like a remote-code-execution flaw and proposes actually running the exploit against the live production instance to verify it's exploitable, rather than just flagging it.",
+    answer: "escalate",
+    explain: "Confirming a vulnerability by attacking your own live system risks the exact outage you're trying to prevent. Verification against production, not a sandboxed clone, needs a human's explicit go-ahead."
+  },
+  {
+    agent: "BLUE", agentLabel: "Blue Agent · Triage",
+    title: "Malware beaconing from a single dev workstation",
+    desc: "A blue agent detects beaconing traffic from one non-production developer laptop. Green agent proposes isolating that single machine from the network.",
+    answer: "approve",
+    explain: "This is the specific example Microsoft itself cites as ready for autonomy: isolating one machine is fast, contained, and trivially reversible — reconnect it once it's clean."
+  },
+  {
+    agent: "GREEN", agentLabel: "Green Agent · Remediation",
+    title: "Push a WAF rule blocking a known-malicious IP range",
+    desc: "Threat intel confirms an IP range is actively scanning for exploits. Green agent proposes pushing a blocking rule to the web application firewall.",
+    answer: "approve",
+    explain: "Blocking a known-bad IP range is low-risk and easy to reverse if it turns out to be a false positive. Standard, well-understood defensive action."
+  },
+  {
+    agent: "GREEN", agentLabel: "Green Agent · Remediation",
+    title: "Open a pull request with a dependency patch",
+    desc: "Green agent drafts a fix for a vulnerable dependency and proposes opening a pull request for engineers to review — it will not merge or deploy the change itself.",
+    answer: "approve",
+    explain: "The agent isn't taking the consequential action here — it's proposing one. A human still reviews and merges the PR, so autonomy at this stage carries almost no risk."
+  },
+  {
+    agent: "RED", agentLabel: "Red Agent · Reconnaissance",
+    title: "Pull a data sample from a third-party vendor's system",
+    desc: "While mapping the supply chain, a red agent finds it can reach a connected third-party vendor's system and proposes pulling a small data sample to test how exposed that integration really is.",
+    answer: "escalate",
+    explain: "This reaches beyond your own infrastructure into a system you don't own or control — a scope and legal question, not just a technical one. That always needs a human decision, regardless of how small the action sounds."
+  },
+  {
+    agent: "BLUE", agentLabel: "Blue Agent · Triage",
+    title: "Disable a legacy internal admin API",
+    desc: "Blue agent notices a rarely-used internal admin API tied to a deprecated tool and, with green agent, proposes disabling the endpoint entirely to shrink attack surface.",
+    answer: "escalate",
+    explain: "\"Rarely used\" and \"safe to disable\" are not the same thing — silent dependencies are exactly what agents can't fully see. Confirm with a human who knows what else might quietly rely on it."
+  },
+  {
+    agent: "GREEN", agentLabel: "Green Agent · Remediation",
+    title: "Rotate an API key that's actively being abused right now",
+    desc: "Blue agent confirms a leaked API key is being actively used by an attacker at this moment. Green agent proposes rotating the key immediately to cut off access.",
+    answer: "approve",
+    explain: "Active, ongoing abuse plus a well-understood, reversible remedy (rotate the key, update the consumer) is the case for speed over caution — every minute of delay is active damage."
+  },
+  {
+    agent: "GREEN", agentLabel: "Green Agent · Remediation",
+    title: "Kernel patch requiring a reboot of every production web server",
+    desc: "Green agent has a kernel-level security patch ready. Applying it requires rebooting the entire production web fleet during business hours.",
+    answer: "escalate",
+    explain: "Fleet-wide reboots during business hours carry major, hard-to-predict operational impact. Scale and timing both push this well past the autonomy threshold — a human should own that call."
+  }
+];
+
+let idx = 0;
+let score = 0;
+let answered = false;
+
+function render() {
+  const s = SCENARIOS[idx];
+  document.getElementById('counterLabel').textContent = `Scenario ${idx+1} / ${SCENARIOS.length}`;
+  document.getElementById('progressFill').style.width = `${(idx / SCENARIOS.length) * 100}%`;
+  document.getElementById('scoreLabel').textContent = score;
+
+  const chip = document.getElementById('agentChip');
+  chip.textContent = s.agent + ' AGENT';
+  chip.className = 'agent-chip ' + s.agent;
+  document.getElementById('agentSubLabel').textContent = s.agentLabel.split('·')[1]?.trim() || '';
+
+  document.getElementById('scenarioTitle').textContent = s.title;
+  document.getElementById('scenarioDesc').textContent = s.desc;
+
+  const btnA = document.getElementById('btnApprove');
+  const btnE = document.getElementById('btnEscalate');
+  [btnA, btnE].forEach(b => { b.disabled = false; b.classList.remove('correct','incorrect','reveal'); });
+
+  document.getElementById('feedback').classList.remove('show');
+  document.getElementById('nextBtn').classList.remove('show');
+  answered = false;
+}
+
+function choose(pick) {
+  if (answered) return;
+  answered = true;
+  const s = SCENARIOS[idx];
+  const correct = pick === s.answer;
+  if (correct) score++;
+
+  const btnA = document.getElementById('btnApprove');
+  const btnE = document.getElementById('btnEscalate');
+  const chosenBtn = pick === 'approve' ? btnA : btnE;
+  const otherBtn = pick === 'approve' ? btnE : btnA;
+  const correctBtn = s.answer === 'approve' ? btnA : btnE;
+
+  btnA.disabled = true;
+  btnE.disabled = true;
+
+  if (correct) {
+    chosenBtn.classList.add('correct');
+    otherBtn.classList.add('reveal');
+  } else {
+    chosenBtn.classList.add('incorrect');
+    correctBtn.classList.add('correct');
+  }
+
+  const fb = document.getElementById('feedback');
+  const verdict = document.getElementById('verdictLabel');
+  const text = document.getElementById('feedbackText');
+  verdict.textContent = correct ? '✓ CORRECT' : '✗ NOT QUITE — correct call: ' + (s.answer === 'approve' ? 'Auto-Approve' : 'Escalate to Human');
+  verdict.className = 'verdict ' + (correct ? 'ok' : 'bad');
+  text.textContent = s.explain;
+  fb.classList.add('show');
+
+  document.getElementById('scoreLabel').textContent = score;
+  const nextBtn = document.getElementById('nextBtn');
+  nextBtn.textContent = idx === SCENARIOS.length - 1 ? 'See results →' : 'Next scenario →';
+  nextBtn.classList.add('show');
+}
+
+function nextScenario() {
+  idx++;
+  if (idx >= SCENARIOS.length) {
+    showResults();
+  } else {
+    render();
+  }
+}
+
+function showResults() {
+  document.getElementById('progressFill').style.width = '100%';
+  document.getElementById('game').classList.add('hide');
+  document.getElementById('results').classList.add('show');
+  document.getElementById('finalScore').textContent = score;
+
+  const heading = document.getElementById('resultsHeading');
+  let verdict;
+  if (score === 12) verdict = "Perfect governance instincts.";
+  else if (score >= 9) verdict = "Solid instincts for reversibility.";
+  else if (score >= 6) verdict = "Decent start — blast radius takes practice.";
+  else verdict = "Autonomy calibration needs work.";
+  heading.textContent = verdict;
+}
+
+function restart() {
+  idx = 0; score = 0; answered = false;
+  document.getElementById('results').classList.remove('show');
+  document.getElementById('game').classList.remove('hide');
+  render();
+}
+
+render();
+</script>
+</body>
+</html>
