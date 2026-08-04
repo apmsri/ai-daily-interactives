@@ -1,0 +1,290 @@
+<title>FaceHugger Sandbox — Find the Real Security Gate</title>
+<style>
+  :root{
+    --bg:#0b0f14; --panel:#121821; --panel-2:#161e29; --border:#243040;
+    --text:#e6edf3; --muted:#8b98a5; --accent:#5eead4; --accent-2:#7dd3fc;
+    --danger:#ff6b6b; --safe:#4ade80; --warn:#fbbf24;
+  }
+  @media (prefers-color-scheme: light){
+    :root{
+      --bg:#f4f6f8; --panel:#ffffff; --panel-2:#eef1f4; --border:#d7dee5;
+      --text:#111820; --muted:#5b6774; --accent:#0f766e; --accent-2:#0369a1;
+      --danger:#c0392b; --safe:#15803d; --warn:#b45309;
+    }
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.5; padding:24px 16px 64px; max-width:920px; margin:0 auto;
+  }
+  code, .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;}
+  h1{font-size:1.7rem; margin:0 0 4px;}
+  .subtitle{color:var(--muted); margin:0 0 8px; font-size:.98rem;}
+  .byline{color:var(--muted); font-size:.82rem; margin-bottom:24px;}
+  .byline a{color:var(--accent-2);}
+  section{margin-bottom:28px;}
+  h2{font-size:1.05rem; letter-spacing:.02em; text-transform:uppercase; color:var(--accent); margin:0 0 10px; border-bottom:1px solid var(--border); padding-bottom:6px;}
+  p{margin:0 0 12px;}
+  .panel{background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:18px;}
+
+  /* pipeline flow */
+  .flow{display:flex; flex-wrap:wrap; gap:10px; align-items:stretch; margin:14px 0 6px;}
+  .stage{
+    flex:1 1 150px; background:var(--panel-2); border:1px solid var(--border);
+    border-radius:10px; padding:10px 12px; font-size:.82rem; position:relative;
+  }
+  .stage .name{font-weight:600; margin-bottom:4px;}
+  .stage .desc{color:var(--muted); font-size:.76rem;}
+  .arrow{align-self:center; color:var(--muted); font-size:1.2rem; flex:0 0 auto;}
+
+  .gate-row{display:flex; flex-wrap:wrap; gap:10px; margin-top:16px;}
+  .gate-btn{
+    flex:1 1 220px; text-align:left; cursor:pointer; background:var(--panel-2);
+    border:1.5px solid var(--border); border-radius:10px; padding:12px 14px;
+    color:var(--text); font-size:.86rem; transition:border-color .15s, transform .1s;
+  }
+  .gate-btn:hover{border-color:var(--accent-2); transform:translateY(-1px);}
+  .gate-btn.selected{border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset;}
+  .gate-btn .g-title{font-weight:700; margin-bottom:3px;}
+  .gate-btn .g-loc{color:var(--muted); font-size:.75rem;}
+
+  .attacks{display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; margin-top:14px;}
+  .attack-card{
+    background:var(--panel-2); border:1px solid var(--border); border-radius:10px; padding:12px 14px;
+  }
+  .attack-card .a-title{font-weight:700; font-size:.9rem; margin-bottom:4px;}
+  .attack-card .a-desc{color:var(--muted); font-size:.78rem; margin-bottom:10px; min-height:48px;}
+  .status{
+    display:inline-flex; align-items:center; gap:6px; font-size:.8rem; font-weight:700;
+    padding:4px 10px; border-radius:999px; background:var(--panel);
+  }
+  .status.blocked{color:var(--safe);}
+  .status.bypassed{color:var(--danger);}
+  .status.idle{color:var(--muted);}
+
+  .controls{display:flex; gap:10px; align-items:center; margin-top:18px; flex-wrap:wrap;}
+  button.run{
+    background:var(--accent); color:#04211c; border:none; border-radius:8px;
+    padding:10px 18px; font-weight:700; cursor:pointer; font-size:.9rem;
+  }
+  button.run:disabled{opacity:.5; cursor:not-allowed;}
+  button.reset{
+    background:transparent; color:var(--muted); border:1px solid var(--border);
+    border-radius:8px; padding:10px 16px; cursor:pointer; font-size:.85rem;
+  }
+  .score{font-weight:700; font-size:.9rem;}
+  .score .n{color:var(--accent);}
+
+  .result-box{
+    margin-top:16px; padding:14px; border-radius:10px; border:1px solid var(--border);
+    background:var(--panel-2); font-size:.86rem; display:none;
+  }
+  .result-box.show{display:block;}
+  .result-box.win{border-color:var(--safe);}
+  .result-box.lose{border-color:var(--danger);}
+  .result-box h3{margin:0 0 6px; font-size:.95rem;}
+
+  .footer-note{color:var(--muted); font-size:.78rem; margin-top:30px; border-top:1px solid var(--border); padding-top:14px;}
+  .footer-note a{color:var(--accent-2);}
+
+  @media (max-width:600px){
+    .flow{flex-direction:column;}
+    .arrow{transform:rotate(90deg); align-self:flex-start; margin-left:8px;}
+  }
+</style>
+
+<h1>🕳️ FaceHugger Sandbox</h1>
+<p class="subtitle">Three real CVEs, one misplaced security gate. Find where Hugging Face's <code>trust_remote_code</code> check needed to live — before they did.</p>
+<p class="byline">Companion to today's post on the FaceHugger vulnerabilities (CVE-2026-44827, CVE-2026-45804, CVE-2026-44513) in Hugging Face Diffusers.</p>
+
+<section class="panel">
+  <h2>1. The pipeline load flow</h2>
+  <p>Loading a Diffusers pipeline walks through these stages before any custom code runs:</p>
+  <div class="flow">
+    <div class="stage"><div class="name">① Config fetch</div><div class="desc">Read <code>model_index.json</code> from the Hub repo.</div></div>
+    <div class="arrow">→</div>
+    <div class="stage"><div class="name">② Full repo download</div><div class="desc">Pull weights + any referenced pipeline / component files.</div></div>
+    <div class="arrow">→</div>
+    <div class="stage"><div class="name">③ Local snapshot load</div><div class="desc">Same flow, but from an already-cached local directory.</div></div>
+    <div class="arrow">→</div>
+    <div class="stage"><div class="name">④ Dynamic module load</div><div class="desc"><code>get_cached_module_file()</code> — the code actually gets <code>exec</code>'d here.</div></div>
+  </div>
+
+  <h2 style="margin-top:22px;">2. Pick where the trust_remote_code gate lives</h2>
+  <p>Diffusers checks <code>trust_remote_code</code> at exactly one point in the flow. You choose where. Then throw all three real-world attacks at it.</p>
+  <div class="gate-row" id="gateRow">
+    <div class="gate-btn" data-gate="early">
+      <div class="g-title">Right after config fetch</div>
+      <div class="g-loc">Stage ① — before we even know which files will run</div>
+    </div>
+    <div class="gate-btn" data-gate="download">
+      <div class="g-title">Inside download()</div>
+      <div class="g-loc">Stage ② — this is what Diffusers &lt; 0.38.0 actually did</div>
+    </div>
+    <div class="gate-btn" data-gate="chokepoint">
+      <div class="g-title">At get_cached_module_file()</div>
+      <div class="g-loc">Stage ④ — the point every path must pass to execute code</div>
+    </div>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>3. Run the attacks</h2>
+  <div class="attacks" id="attacks">
+    <div class="attack-card" data-attack="crossRepo">
+      <div class="a-title">Cross-repo custom pipeline</div>
+      <div class="a-desc"><code>from_pretrained('repoA', custom_pipeline='attacker/repoB', trust_remote_code=False)</code> — the gate validates repoA, but repoB's code is what runs.</div>
+      <span class="status idle" id="status-crossRepo">● not tested</span>
+    </div>
+    <div class="attack-card" data-attack="localSnapshot">
+      <div class="a-title">Local snapshot bypass</div>
+      <div class="a-desc">Loading from a local directory referencing a malicious <code>attacker/repoB</code> pipeline skips <code>download()</code> entirely.</div>
+      <span class="status idle" id="status-localSnapshot">● not tested</span>
+    </div>
+    <div class="attack-card" data-attack="raceCondition">
+      <div class="a-title">TOCTOU race condition</div>
+      <div class="a-desc">~0.3s window between the config check and the full download — swap the file mid-flight and the gate never re-checks it.</div>
+      <span class="status idle" id="status-raceCondition">● not tested</span>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button class="run" id="runBtn" disabled>Run all 3 attacks</button>
+    <button class="reset" id="resetBtn">Reset</button>
+    <span class="score">Blocked: <span class="n" id="scoreN">0</span>/3</span>
+  </div>
+
+  <div class="result-box" id="resultBox">
+    <h3 id="resultTitle"></h3>
+    <p id="resultBody" style="margin:0;"></p>
+  </div>
+</section>
+
+<p class="footer-note">
+  Source: Zafran Labs researchers Gal Zaban and Ido Shani disclosed FaceHugger; fixed in
+  <code>diffusers==0.38.0</code> by moving the check into
+  <code>get_cached_module_file</code> in <code>src/diffusers/utils/dynamic_modules_utils.py</code>.
+  See the <a href="https://github.com/huggingface/diffusers/security/advisories/GHSA-98h9-4798-4q5v" target="_blank" rel="noopener">GitHub Security Advisory</a>.
+  This sandbox is a simplified simulation for teaching the gate-placement lesson, not the literal source code.
+</p>
+
+<script>
+(function(){
+  var selectedGate = null;
+  var results = {crossRepo:null, localSnapshot:null, raceCondition:null};
+
+  // ground truth: only the chokepoint blocks every path, matching what actually shipped.
+  var TRUTH = {
+    early:      { crossRepo:false, localSnapshot:false, raceCondition:false },
+    download:   { crossRepo:false, localSnapshot:false, raceCondition:false },
+    chokepoint: { crossRepo:true,  localSnapshot:true,  raceCondition:true  }
+  };
+
+  var REASON = {
+    early: {
+      crossRepo: "The gate fired on repoA's config before repoB (the actual custom_pipeline source) was even resolved.",
+      localSnapshot: "Local loads never trigger a fresh config fetch, so this gate is simply never reached.",
+      raceCondition: "Checking immediately after the config fetch is exactly the moment the attacker can still swap the payload before the real download."
+    },
+    download: {
+      crossRepo: "This is the real historical bug: the check validated the wrong repo (repoA instead of attacker-controlled repoB).",
+      localSnapshot: "Local snapshot paths skip download() entirely, so a gate living inside it never runs.",
+      raceCondition: "The check and the full download happen as two separate, non-atomic requests inside download() — the ~0.3s gap survives the fix."
+    },
+    chokepoint: {
+      crossRepo: "Every custom_pipeline module, from any repo, must pass through get_cached_module_file to execute — so it's caught here regardless of source.",
+      localSnapshot: "Local or remote, cached or fresh — all dynamic modules funnel through this one loader before exec.",
+      raceCondition: "There's nothing left to race: the check happens at the moment of execution, not at an earlier fetch step an attacker can outrun."
+    }
+  };
+
+  var gateRow = document.getElementById('gateRow');
+  var runBtn = document.getElementById('runBtn');
+  var resetBtn = document.getElementById('resetBtn');
+  var scoreN = document.getElementById('scoreN');
+  var resultBox = document.getElementById('resultBox');
+  var resultTitle = document.getElementById('resultTitle');
+  var resultBody = document.getElementById('resultBody');
+
+  gateRow.addEventListener('click', function(e){
+    var btn = e.target.closest('.gate-btn');
+    if(!btn) return;
+    Array.prototype.forEach.call(gateRow.querySelectorAll('.gate-btn'), function(b){ b.classList.remove('selected'); });
+    btn.classList.add('selected');
+    selectedGate = btn.getAttribute('data-gate');
+    runBtn.disabled = false;
+    resetStatuses();
+  });
+
+  function resetStatuses(){
+    results = {crossRepo:null, localSnapshot:null, raceCondition:null};
+    ['crossRepo','localSnapshot','raceCondition'].forEach(function(k){
+      var el = document.getElementById('status-'+k);
+      el.className = 'status idle';
+      el.textContent = '● not tested';
+    });
+    scoreN.textContent = '0';
+    resultBox.classList.remove('show','win','lose');
+  }
+
+  resetBtn.addEventListener('click', function(){
+    selectedGate = null;
+    Array.prototype.forEach.call(gateRow.querySelectorAll('.gate-btn'), function(b){ b.classList.remove('selected'); });
+    runBtn.disabled = true;
+    resetStatuses();
+  });
+
+  runBtn.addEventListener('click', function(){
+    if(!selectedGate) return;
+    runBtn.disabled = true;
+    var keys = ['crossRepo','localSnapshot','raceCondition'];
+    var i = 0;
+    resetStatuses();
+    function step(){
+      if(i >= keys.length){
+        finish();
+        return;
+      }
+      var key = keys[i];
+      var el = document.getElementById('status-'+key);
+      el.className = 'status idle';
+      el.textContent = '⏳ simulating…';
+      setTimeout(function(){
+        var blocked = TRUTH[selectedGate][key];
+        results[key] = blocked;
+        el.className = 'status ' + (blocked ? 'blocked' : 'bypassed');
+        el.textContent = blocked ? '✅ blocked' : '💀 bypassed — code executes';
+        var count = keys.filter(function(k){ return results[k] === true; }).length;
+        scoreN.textContent = count;
+        i++;
+        setTimeout(step, 350);
+      }, 500);
+    }
+    step();
+  });
+
+  function finish(){
+    var keys = ['crossRepo','localSnapshot','raceCondition'];
+    var count = keys.filter(function(k){ return results[k] === true; }).length;
+    var lines = keys.map(function(k){
+      var label = k === 'crossRepo' ? 'Cross-repo pipeline' : k === 'localSnapshot' ? 'Local snapshot bypass' : 'Race condition';
+      return '• ' + label + ': ' + REASON[selectedGate][k];
+    }).join('<br>');
+
+    resultBox.classList.add('show');
+    if(count === 3){
+      resultBox.classList.add('win');
+      resultBox.classList.remove('lose');
+      resultTitle.textContent = '3/3 blocked — you found the real fix.';
+    } else {
+      resultBox.classList.add('lose');
+      resultBox.classList.remove('win');
+      resultTitle.textContent = count + '/3 blocked — this placement still leaves a hole.';
+    }
+    resultBody.innerHTML = lines;
+    runBtn.disabled = false;
+  }
+})();
+</script>
