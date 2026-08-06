@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Break the Filter — A Prompt Injection Sandbox</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%AA%A4%3C/text%3E%3C/svg%3E">
+<style>
+  :root{
+    --bg:#0b0f14; --panel:#121821; --panel-2:#161e29; --border:#243040;
+    --text:#e6edf3; --muted:#8b98a5; --accent:#5eead4; --accent-2:#7dd3fc;
+    --danger:#ff6b6b; --safe:#4ade80; --warn:#fbbf24;
+  }
+  @media (prefers-color-scheme: light){
+    :root{
+      --bg:#f4f6f8; --panel:#ffffff; --panel-2:#eef1f4; --border:#d7dee5;
+      --text:#111820; --muted:#5b6774; --accent:#0f766e; --accent-2:#0369a1;
+      --danger:#c0392b; --safe:#15803d; --warn:#b45309;
+    }
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.5; padding:24px 16px 64px; max-width:920px; margin:0 auto;
+  }
+  code, .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;}
+  h1{font-size:1.7rem; margin:0 0 4px;}
+  .subtitle{color:var(--muted); margin:0 0 8px; font-size:.98rem;}
+  .byline{color:var(--muted); font-size:.82rem; margin-bottom:24px;}
+  .byline a{color:var(--accent-2);}
+  section{margin-bottom:28px;}
+  h2{font-size:1.05rem; letter-spacing:.02em; text-transform:uppercase; color:var(--accent); margin:0 0 10px; border-bottom:1px solid var(--border); padding-bottom:6px;}
+  p{margin:0 0 12px;}
+  .panel{background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:18px;}
+
+  .intro-grid{display:flex; gap:14px; flex-wrap:wrap;}
+  .intro-grid .stat{flex:1 1 130px; background:var(--panel-2); border:1px solid var(--border); border-radius:10px; padding:10px 12px;}
+  .intro-grid .stat b{display:block; font-size:1.1rem; color:var(--accent-2);}
+  .intro-grid .stat span{font-size:.76rem; color:var(--muted);}
+
+  .level-tabs{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;}
+  .level-tab{
+    padding:6px 12px; border-radius:999px; border:1.5px solid var(--border); background:var(--panel-2);
+    color:var(--muted); font-size:.8rem; font-weight:600; cursor:default;
+  }
+  .level-tab.active{border-color:var(--accent); color:var(--accent);}
+  .level-tab.done{border-color:var(--safe); color:var(--safe);}
+
+  .goal{color:var(--muted); font-size:.86rem; margin-bottom:12px;}
+  .goal b{color:var(--text);}
+
+  .code-line{
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    background:var(--panel-2); border:1px solid var(--border); border-radius:8px;
+    padding:12px 14px; font-size:.86rem; white-space:pre-wrap; word-break:break-all; margin-bottom:14px;
+  }
+  .code-line .lit{color:var(--muted);}
+  .code-line .hole{color:var(--accent-2); font-weight:700;}
+
+  .input-row{display:flex; gap:10px; flex-wrap:wrap; margin-bottom:10px;}
+  input[type=text]{
+    flex:1 1 260px; background:var(--panel-2); border:1.5px solid var(--border); border-radius:8px;
+    padding:10px 12px; color:var(--text); font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:.88rem;
+  }
+  input[type=text]:focus{outline:none; border-color:var(--accent-2);}
+  button{
+    cursor:pointer; border-radius:8px; border:1.5px solid var(--border); background:var(--panel-2);
+    color:var(--text); padding:10px 16px; font-size:.85rem; font-weight:700; transition:border-color .15s, transform .1s;
+  }
+  button:hover{border-color:var(--accent-2); transform:translateY(-1px);}
+  button.primary{background:var(--accent); border-color:var(--accent); color:#00201c;}
+  button.ghost{background:transparent;}
+  button:disabled{opacity:.4; cursor:default; transform:none;}
+
+  .preview-label{font-size:.72rem; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); margin-bottom:4px;}
+  .preview{
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:.86rem;
+    background:var(--panel-2); border:1px solid var(--border); border-radius:8px; padding:12px 14px;
+    margin-bottom:14px; white-space:pre-wrap; word-break:break-all; min-height:20px;
+  }
+  .tok-safe{color:var(--text);}
+  .tok-blocked{color:var(--danger); text-decoration:underline wavy var(--danger);}
+  .tok-bypass{color:var(--warn); font-weight:700;}
+  .tok-quote{color:var(--accent-2); font-weight:700;}
+
+  .status{border-radius:8px; padding:12px 14px; font-size:.86rem; margin-bottom:10px; border:1.5px solid var(--border);}
+  .status.idle{color:var(--muted);}
+  .status.blocked{border-color:var(--danger); color:var(--danger); background:rgba(255,107,107,.08);}
+  .status.partial{border-color:var(--warn); color:var(--warn); background:rgba(251,191,36,.08);}
+  .status.pass{border-color:var(--safe); color:var(--safe); background:rgba(74,222,128,.1);}
+
+  details{margin-top:8px;}
+  summary{cursor:pointer; color:var(--accent-2); font-size:.82rem; font-weight:600;}
+  .hint-body{color:var(--muted); font-size:.82rem; margin-top:8px; padding-left:2px;}
+
+  .fix-toggle{margin-top:6px;}
+  .fix-panel{display:none; margin-top:12px;}
+  .fix-panel.open{display:block;}
+  .fix-panel pre{
+    background:var(--panel-2); border:1px solid var(--border); border-radius:8px; padding:14px;
+    overflow-x:auto; font-size:.8rem; margin:0 0 10px;
+  }
+
+  .score-bar{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:16px; flex-wrap:wrap;}
+  .score-bar .pill{background:var(--panel-2); border:1px solid var(--border); border-radius:999px; padding:6px 14px; font-size:.82rem; font-weight:700;}
+
+  footer{color:var(--muted); font-size:.78rem; margin-top:32px; border-top:1px solid var(--border); padding-top:16px;}
+  footer a{color:var(--accent-2);}
+  .cve-tag{display:inline-block; background:var(--panel-2); border:1px solid var(--border); border-radius:6px; padding:1px 8px; font-size:.74rem; font-family:ui-monospace,monospace; color:var(--accent-2);}
+</style>
+</head>
+<body>
+
+<h1>🪤 Break the Filter</h1>
+<p class="subtitle">A hands-on sandbox for the "framework is the vulnerability" story — no LLM required, just you vs. a leaky guardrail.</p>
+<p class="byline">Companion to today's post on AI agent framework exploitation (Black Hat USA, Aug 5 2026) · runs entirely in your browser, nothing you type leaves this page</p>
+
+<section class="panel">
+  <h2>The setup</h2>
+  <p>An AI search agent lets a model fill in a <b>city</b> parameter. The framework builds a filter function by pasting that value straight into a Python string, then hands it to an "AST-guarded" evaluator meant to stop dangerous code:</p>
+  <div class="code-line"><span class="lit">lambda x: x.city == '</span><span class="hole">{your input}</span><span class="lit">'</span></div>
+  <p>This is a simplified, client-side re-creation of the real bug behind <span class="cve-tag">CVE-2026-26030</span>, disclosed in Microsoft's Semantic Kernel. Nothing here executes real code — the "guard" below is a JavaScript stand-in for the actual AST blocklist, reproducing the same category of gaps. Your job: think like the model would if an attacker had hijacked its instructions, and get past three levels of the guard.</p>
+  <div class="intro-grid">
+    <div class="stat"><b>0</b><span id="statScore">/3 levels cleared</span></div>
+    <div class="stat"><b>Blocklist</b><span>checks literal words only</span></div>
+    <div class="stat"><b>Goal</b><span>escape → bypass → execute</span></div>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="level-tabs" id="levelTabs"></div>
+  <div id="levelBody"></div>
+</section>
+
+<section class="panel" id="fixSection" style="display:none;">
+  <h2>What actually fixes this</h2>
+  <p>Once you've cleared all three levels, the pattern behind them is worth naming: the guard was a <b>blocklist</b> (deny known-bad tokens) protecting something that should never have accepted arbitrary code in the first place.</p>
+  <button class="ghost fix-toggle" id="fixToggleBtn">Show the real fix →</button>
+  <div class="fix-panel" id="fixPanel">
+    <p class="preview-label">Vulnerable pattern</p>
+    <pre>filter_fn = eval(f"lambda x: x.city == '{user_city}'")
+# blocklist checks for 'import', 'exec', 'os.', etc — but
+# never inspects attribute-chain or subscript AST nodes</pre>
+    <p class="preview-label">Fixed pattern</p>
+    <pre>from dataclasses import dataclass
+
+@dataclass
+class CityFilter:
+    city: str
+
+def apply_filter(records, f: CityFilter):
+    return [r for r in records if r.city == f.city]
+# no eval, no string-built code — user input is DATA,
+# never assembled into anything the interpreter parses as code</pre>
+    <p>The fix isn't a better blocklist. It's removing <code>eval()</code> from the path a model-controlled string can reach at all — swap dynamic code construction for a structured, typed filter object. If you must accept dynamic expressions, use an <b>allowlist</b> of AST node types (e.g. only <code>Compare</code>, <code>Name</code>, <code>Constant</code>) rather than a denylist of scary words, since attribute traversal (<code>__class__</code>, <code>__base__</code>, <code>__subclasses__</code>) and subscript access (<code>[...]</code>) route around word-based filters every time.</p>
+  </div>
+</section>
+
+<footer>
+  Sources: <a href="https://www.theregister.com/security/2026/08/05/prompt-injection-isnt-the-bug-ai-agent-frameworks-are/" target="_blank" rel="noopener">The Register — "Prompt injection isn't the bug, AI agent frameworks are"</a> (Check Point Research, Black Hat USA, Aug 5 2026) ·
+  <a href="https://www.microsoft.com/en-us/security/blog/2026/05/07/prompts-become-shells-rce-vulnerabilities-ai-agent-frameworks/" target="_blank" rel="noopener">Microsoft Security Blog — "When prompts become shells"</a> (CVE-2026-26030, CVE-2026-25592)
+</footer>
+
+<script>
+(function(){
+  var BLOCKED = ['import','eval(','exec(','os.','subprocess','__import__','open(','system('];
+  var BYPASS = ['__class__','__base__','__mro__','__subclasses__','__globals__','__builtins__','getattr'];
+
+  var levels = [
+    {
+      title: 'Level 1 — Escape the string',
+      goal: 'Get any character out of the quoted literal so the parser stops treating your input as inert data.',
+      hint: 'The template is <code>lambda x: x.city == \'{input}\'</code>. What single character ends a Python string early?',
+      check: function(v){
+        if (v.indexOf("'") === -1) return {state:'idle', msg:'Type something — try closing the string.'};
+        return {state:'pass', msg:'✅ Cleared. Your quote closed the literal early — everything after it is now parsed as code, not data.'};
+      }
+    },
+    {
+      title: 'Level 2 — Bypass the naive guard',
+      goal: 'Escape the string AND include a real attribute-chain trick (like __class__ or __subclasses__) without tripping the word blocklist (import, eval(, exec(, os., subprocess, __import__, open(, system().',
+      hint: 'The real CVE\'s blocklist checked literal words like "import" and "os." but never inspected attribute access. Try something like <code>\' or \'\'.__class__.__base__</code> — no blocked words, but it reaches Python\'s class hierarchy.',
+      check: function(v){
+        var lower = v.toLowerCase();
+        var hasQuote = v.indexOf("'") !== -1;
+        var blockedHit = BLOCKED.find(function(b){ return lower.indexOf(b) !== -1; });
+        var bypassHit = BYPASS.find(function(b){ return lower.indexOf(b.toLowerCase()) !== -1; });
+        if (!hasQuote) return {state:'idle', msg:'You still need to escape the string first (Level 1 trick).'};
+        if (blockedHit) return {state:'blocked', msg:'🚫 Guard fired: literal word "' + blockedHit + '" is on the blocklist.'};
+        if (!bypassHit) return {state:'partial', msg:'String escaped, but no dangerous construct yet. Try an attribute chain like __class__.'};
+        return {state:'pass', msg:'✅ Cleared. "' + bypassHit + '" isn\'t a scary word to a word-based filter — but it walks Python\'s live object graph.'};
+      }
+    },
+    {
+      title: 'Level 3 — Reach the flag',
+      goal: 'Do everything above, and also use subscript/index access (square brackets) — the AST node type the real guard never checked.',
+      hint: 'The disclosed bug missed <code>ast.Subscript</code> nodes entirely. Real payloads used something like <code>__subclasses__()[140]</code> to index into loaded classes and reach a module like <code>os</code>. Add a <code>[</code> and <code>]</code> to your payload.',
+      check: function(v){
+        var lower = v.toLowerCase();
+        var hasQuote = v.indexOf("'") !== -1;
+        var blockedHit = BLOCKED.find(function(b){ return lower.indexOf(b) !== -1; });
+        var bypassHit = BYPASS.find(function(b){ return lower.indexOf(b.toLowerCase()) !== -1; });
+        var hasSubscript = /\[[^\]]*\]/.test(v);
+        if (!hasQuote || !bypassHit) return {state:'idle', msg:'Bring your Level 2 payload along, then add [ ] subscript access to it.'};
+        if (blockedHit) return {state:'blocked', msg:'🚫 Guard fired: literal word "' + blockedHit + '" is on the blocklist.'};
+        if (!hasSubscript) return {state:'partial', msg:'Attribute chain present, but no subscript access yet. Add something like [0] or [140].'};
+        return {state:'pass', msg:'🚩 Simulated RCE. String escaped + attribute traversal + unchecked subscript access — this is the exact node-type gap the real guard shipped with. In production, this is the difference between a search box and a shell.'};
+      }
+    }
+  ];
+
+  var cleared = [false, false, false];
+  var current = 0;
+
+  var tabsEl = document.getElementById('levelTabs');
+  var bodyEl = document.getElementById('levelBody');
+  var statScore = document.getElementById('statScore');
+
+  function escapeHtml(s){
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function renderPreview(container, v){
+    var lower = v.toLowerCase();
+    var html = '<span class="lit">lambda x: x.city == \'</span>';
+    if (v.length === 0){
+      html += '<span class="tok-safe" style="color:var(--muted)">(type below)</span>';
+    } else {
+      var esc = escapeHtml(v);
+      var blockedHit = BLOCKED.find(function(b){ return lower.indexOf(b) !== -1; });
+      var bypassHit = BYPASS.find(function(b){ return lower.indexOf(b.toLowerCase()) !== -1; });
+      var cls = 'tok-safe';
+      if (blockedHit) cls = 'tok-blocked';
+      else if (bypassHit) cls = 'tok-bypass';
+      html += '<span class="' + cls + '">' + esc + '</span>';
+    }
+    html += '<span class="lit">\'</span>';
+    container.innerHTML = html;
+  }
+
+  function renderTabs(){
+    tabsEl.innerHTML = '';
+    levels.forEach(function(lv, i){
+      var span = document.createElement('span');
+      var cls = 'level-tab';
+      if (cleared[i]) cls += ' done';
+      else if (i === current) cls += ' active';
+      span.className = cls;
+      span.textContent = (cleared[i] ? '✓ ' : '') + 'Level ' + (i+1);
+      tabsEl.appendChild(span);
+    });
+  }
+
+  function renderLevel(i){
+    current = i;
+    renderTabs();
+    var lv = levels[i];
+    bodyEl.innerHTML =
+      '<div class="goal"><b>' + lv.title + '</b><br>' + lv.goal + '</div>' +
+      '<div class="preview-label">Constructed lambda</div>' +
+      '<div class="preview" id="preview"></div>' +
+      '<div class="input-row">' +
+        '<input type="text" id="payloadInput" placeholder="type your payload…" autocomplete="off" spellcheck="false">' +
+        '<button class="primary" id="checkBtn">Run guard</button>' +
+      '</div>' +
+      '<div class="status idle" id="statusBox">Waiting for input…</div>' +
+      '<details><summary>Need a hint?</summary><div class="hint-body">' + lv.hint + '</div></details>';
+
+    var input = document.getElementById('payloadInput');
+    var preview = document.getElementById('preview');
+    var statusBox = document.getElementById('statusBox');
+    var checkBtn = document.getElementById('checkBtn');
+
+    renderPreview(preview, '');
+
+    input.addEventListener('input', function(){
+      renderPreview(preview, input.value);
+    });
+
+    function runCheck(){
+      var v = input.value;
+      var result = lv.check(v);
+      statusBox.className = 'status ' + result.state;
+      statusBox.textContent = result.msg;
+      if (result.state === 'pass' && !cleared[i]){
+        cleared[i] = true;
+        updateScore();
+        setTimeout(function(){
+          if (i < levels.length - 1){
+            renderLevel(i+1);
+          } else {
+            document.getElementById('fixSection').style.display = 'block';
+            document.getElementById('fixSection').scrollIntoView({behavior:'smooth', block:'start'});
+          }
+        }, 1400);
+      }
+    }
+
+    checkBtn.addEventListener('click', runCheck);
+    input.addEventListener('keydown', function(e){ if (e.key === 'Enter') runCheck(); });
+    input.focus();
+  }
+
+  function updateScore(){
+    var n = cleared.filter(Boolean).length;
+    statScore.parentElement.querySelector('b').textContent = n;
+    renderTabs();
+  }
+
+  document.getElementById('fixToggleBtn').addEventListener('click', function(){
+    var panel = document.getElementById('fixPanel');
+    var open = panel.classList.toggle('open');
+    this.textContent = open ? 'Hide the real fix ←' : 'Show the real fix →';
+  });
+
+  renderLevel(0);
+})();
+</script>
+
+</body>
+</html>
